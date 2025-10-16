@@ -1,62 +1,73 @@
 import express from "express";
 import multer from "multer";
-import path from "path";
 import UserProfile from "../models/UserProfile.js";
-
 
 const router = express.Router();
 
-// Multer config for image upload
+// File upload setup
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) =>
-    cb(null, "profile-" + Date.now() + path.extname(file.originalname)),
-});
-const upload = multer({ storage });
-
-// GET profile by ownerId
-router.get("/:ownerId", async (req, res) => {
-  try {
-    const profile = await UserProfile.findOne({ ownerId: req.params.ownerId });
-    if (!profile) return res.status(404).json({ message: "Profile not found" });
-    res.json(profile);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + "-" + file.originalname);
+  },
 });
 
-// POST create/update profile
+const upload = multer({ storage: storage });
+
+// ✅ CREATE or UPDATE Profile
 router.post("/", upload.single("image"), async (req, res) => {
   try {
     const { ownerId, name, email, phone, address } = req.body;
+    if (!ownerId) {
+      return res.status(400).json({ message: "ownerId is required" });
+    }
+
+    // ✅ Check if profile already exists
     let profile = await UserProfile.findOne({ ownerId });
 
-    const imagePath = req.file
-      ? `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`
-      : profile?.image || "";
-
     if (profile) {
+      // Update existing profile
       profile.name = name;
       profile.email = email;
       profile.phone = phone;
       profile.address = address;
-      profile.image = imagePath;
+      if (req.file) {
+        profile.image = req.file.path;
+      }
       await profile.save();
+      return res.status(200).json({ message: "Profile updated", profile });
     } else {
-      profile = new UserProfile({
+      // Create new profile
+      const newProfile = new UserProfile({
         ownerId,
         name,
         email,
         phone,
         address,
-        image: imagePath,
+        image: req.file ? req.file.path : "",
       });
-      await profile.save();
+      await newProfile.save();
+      return res.status(200).json({ message: "Profile created", newProfile });
     }
-
-    res.json(profile);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Error saving/updating profile:", err);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// ✅ GET profile by ownerId
+router.get("/:ownerId", async (req, res) => {
+  try {
+    const profile = await UserProfile.findOne({ ownerId: req.params.ownerId });
+    if (!profile) {
+      return res.status(404).json({ message: "Profile not found" });
+    }
+    res.status(200).json(profile);
+  } catch (err) {
+    console.error("Error fetching profile:", err);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 

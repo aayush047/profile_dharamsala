@@ -19,7 +19,8 @@ router.post("/", upload.single("image"), async (req, res) => {
     if (!ownerId) return res.status(400).json({ message: "ownerId is required" });
 
     let profile = await UserProfile.findOne({ ownerId });
-    const imagePath = req.file ? `uploads/${req.file.filename}` : profile?.image || "";
+   const imagePath = req.file ? req.file.filename : profile?.image || "";
+
 
     if (profile) {
       profile.name = name;
